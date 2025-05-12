@@ -6,6 +6,7 @@ import torch
 from scipy.io import savemat
 from utils.util import update_linear_schedule
 from runner.separated.base_runner import Runner
+from tqdm import tqdm
 
 
 def _t2n(x):
@@ -21,7 +22,7 @@ class EnvRunner(Runner):
         start = time.time()
         episodes = int(self.num_env_steps) // self.episode_length // self.n_rollout_threads
         reward_list = np.zeros([episodes, 1])
-        for episode in range(episodes):
+        for episode in tqdm(range(episodes)):
             if self.use_linear_lr_decay:
                 for agent_id in range(self.num_agents):
                     self.trainer[agent_id].policy.lr_decay(episode, episodes)

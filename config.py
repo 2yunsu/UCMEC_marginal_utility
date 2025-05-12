@@ -238,7 +238,7 @@ def get_config():
     parser.add_argument(
         "--use_centralized_V",
         action="store_false",
-        default=True,
+        default=False,
         help="Whether to use centralized V function",
     )
     parser.add_argument(

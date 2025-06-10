@@ -7,6 +7,7 @@ import numpy as np
 from pathlib import Path
 import torch
 import time
+from tqdm import tqdm
 
 # Get the parent directory of the current file
 parent_dir = os.path.abspath(os.path.join(os.getcwd(), "."))

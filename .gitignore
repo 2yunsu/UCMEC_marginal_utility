@@ -6,3 +6,15 @@ results/
 /scripts/wandb
 scripts/wandb/
 wandb/
+# Python 캐시 파일들
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.pyo
+*.pyd
+.Python

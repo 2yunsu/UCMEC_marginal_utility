@@ -6,6 +6,7 @@ results/
 /scripts/wandb
 scripts/wandb/
 wandb/
+
 # Python 캐시 파일들
 __pycache__/
 *.py[cod]
@@ -18,3 +19,8 @@ build/
 *.pyo
 *.pyd
 .Python
+
+# 기타
+.DS_Store
+*.log
+*.tmp

@@ -5,6 +5,10 @@ import numpy as np
 import math
 # from stable_baselines3.common.env_checker import check_env
 import cvxpy as cp
+import wandb
+import time
+import psutil
+import GPUtil
 
 
 class MA_UCMEC_stat_noncoop(object):
@@ -35,6 +39,10 @@ class MA_UCMEC_stat_noncoop(object):
         self.locations_cpu[2, 1] = 600
         # self.locations_cpu[3, 0] = 600
         # self.locations_cpu[3, 1] = 600
+
+        # wandb 초기화 (train.py에서 이미 초기화되었다면 생략 가능)
+        self.use_wandb = True
+        self.start_time = time.time()
 
         # calculate distance between APs and users MxN matrix
         self.distance_matrix = np.zeros([self.M, self.N])
@@ -318,6 +326,9 @@ class MA_UCMEC_stat_noncoop(object):
         pass
 
     def reset(self):
+        # 에피소드 시작 시간 초기화
+        self.start_time = time.time()
+        self.step_num = 0
         sub_agent_obs = []
         for i in range(self.agent_num):
             sub_obs = np.random.uniform(low=self.obs_low, high=self.obs_high, size=(self.obs_dim,))
@@ -325,6 +336,7 @@ class MA_UCMEC_stat_noncoop(object):
         return sub_agent_obs
 
     def step(self, action):
+        step_start_time = time.time()
         self.step_num += 1
 
         if self.is_mobile:
@@ -481,6 +493,21 @@ class MA_UCMEC_stat_noncoop(object):
         # print(actual_process_delay)
         # print(C.value)
         '''
+        # CPU 사용량 계산
+        cpu_usage = psutil.cpu_percent(interval=0.1)
+        memory_usage = psutil.virtual_memory().percent
+        
+        # GPU 사용량 계산 (GPU가 있는 경우)
+        try:
+            gpus = GPUtil.getGPUs()
+            gpu_usage = gpus[0].load * 100 if gpus else 0
+            gpu_memory = gpus[0].memoryUtil * 100 if gpus else 0
+        except:
+            gpu_usage = 0
+            gpu_memory = 0
+        
+        # 스텝 처리 시간
+        step_time = time.time() - step_start_time
 
         # reward calculation
         # print("Uplink Delay:", uplink_delay)
@@ -502,6 +529,7 @@ class MA_UCMEC_stat_noncoop(object):
             reward[i, 0] = -0.9 * total_delay[i, 0] + 0.1 * (self.tau_c - total_delay[i, 0])
         # print("Average Total Delay (ms):", np.sum(total_delay) * 1000 / self.M_sim)
         # print("Average Uplink Rate (Mbps):", np.sum(uplink_rate_access) / (self.M_sim * 1e6))
+        
         sub_agent_obs = []
         sub_agent_reward = []
         sub_agent_done = []
@@ -524,6 +552,105 @@ class MA_UCMEC_stat_noncoop(object):
         self.delay_last = total_delay
         self.omega_last = omega_current
         self.p_last = p_current
+
+        
+        if self.use_wandb:
+            # 기본 메트릭
+            avg_reward = np.mean(reward)
+            avg_total_delay = np.mean(total_delay) * 1000  # ms 단위 (지연시간)
+            avg_total_delay_sec = np.mean(total_delay)  # 초 단위 (지연시간)
+            avg_uplink_rate = np.sum(uplink_rate_access) / (self.M_sim * 1e6)  # Mbps (통신률)
+            
+            # 활성 사용자 수 계산
+            active_users = np.sum(omega_current != 0)
+            
+            # 처리량 계산 (Mbps와 bps 단위)
+            total_throughput_mbps = 0
+            total_throughput_bps = 0
+            uplink_throughput_mbps = np.sum(uplink_rate_access) / 1e6  # Mbps
+            uplink_throughput_bps = np.sum(uplink_rate_access)  # bps
+            fronthaul_throughput_mbps = 0
+            fronthaul_throughput_bps = 0
+            
+            for i in range(self.M_sim):
+                if omega_current[i] != 0:
+                    for j in range(self.N_sim):
+                        if self.cluster_matrix[i, j] == 1:
+                            fronthaul_throughput_mbps += front_rate_user[i, j] / 1e6  # Mbps
+                            fronthaul_throughput_bps += front_rate_user[i, j]  # bps
+            
+            total_throughput_mbps = uplink_throughput_mbps + fronthaul_throughput_mbps
+            total_throughput_bps = uplink_throughput_bps + fronthaul_throughput_bps
+            
+            # CPU 계산량 관련 메트릭
+            total_computing_load = 0
+            edge_utilization = np.zeros(self.K)
+            
+            for i in range(self.K):
+                edge_load = 0
+                for j in range(self.M_sim):
+                    if omega_current[j] != 0 and int(omega_current[j] - 1) == i:
+                        edge_load += task_mat[j, i]
+                if self.C_edge[i, 0] > 0:
+                    edge_utilization[i] = edge_load / self.C_edge[i, 0]
+                total_computing_load += edge_load
+            
+            # 로컬 처리 비율
+            local_processing_ratio = np.sum(omega_current == 0) / self.M_sim
+            
+            wandb.log({
+                # Reward 메트릭
+                "reward/average_reward": avg_reward,
+                "reward/total_reward": np.sum(reward),
+                
+                # 지연시간 메트릭
+                "delay/average_total_delay_ms": avg_total_delay,
+                "delay/average_local_delay_ms": np.mean(local_delay) * 1000,
+                "delay/average_uplink_delay_ms": np.mean(uplink_delay) * 1000,
+                "delay/average_process_delay_ms": np.mean(actual_process_delay) * 1000,
+                "delay/average_front_delay_ms": np.mean(front_delay) * 1000,
+                "delay/delay_ratio": np.mean(local_delay) / (np.mean(front_delay) + np.mean(uplink_delay) + np.mean(actual_process_delay)),  # added
+
+                
+                # 통신 메트릭
+                "communication/average_uplink_rate_mbps": avg_uplink_rate,
+                "communication/total_uplink_rate_mbps": np.sum(uplink_rate_access) / 1e6,
+                
+                # CPU 계산량 메트릭
+                "computing/total_computing_load": total_computing_load,
+                "computing/edge_cpu_utilization_0": edge_utilization[0],
+                "computing/edge_cpu_utilization_1": edge_utilization[1],
+                "computing/edge_cpu_utilization_2": edge_utilization[2],
+                "computing/average_edge_utilization": np.mean(edge_utilization),
+                "computing/local_processing_ratio": local_processing_ratio,
+                
+                # 시스템 자원 사용량
+                "system/cpu_usage_percent": cpu_usage,
+                "system/memory_usage_percent": memory_usage,
+                "system/gpu_usage_percent": gpu_usage,
+                "system/gpu_memory_percent": gpu_memory,
+                "system/step_time_seconds": step_time,
+                
+                # 액션 분포
+                "action/cpu_0_selected": np.sum(omega_current == 0),
+                "action/cpu_1_selected": np.sum(omega_current == 1),
+                "action/cpu_2_selected": np.sum(omega_current == 2),
+                "action/cpu_3_selected": np.sum(omega_current == 3),
+                "action/average_power_level": np.mean(p_current),
+                
+                # 스텝 정보
+                "episode/step_number": self.step_num,
+                "episode/episode_done": np.all(done),
+            })
+            
+            # 에피소드 종료 시 추가 로깅
+            if self.step_num > 20:  # 에피소드 종료
+                episode_time = time.time() - self.start_time
+                wandb.log({
+                    "episode/total_episode_time": episode_time,
+                    "episode/average_step_time": episode_time / self.step_num,
+                })
+
         return [sub_agent_obs, sub_agent_reward, sub_agent_done, sub_agent_info]
 
 
@@ -536,7 +663,7 @@ class MA_UCMEC_stat_noncoop(object):
 #         # Random action
 #         action = env.action_space.sample()
 #         obs, reward, done, info = env.step(action)
-#         if np.all(done):
+#         if np.all(done):``
 #             obs = env.reset()
 #         # print(f"state: {obs} \n")
 #         print(f"action : {action}, reward : {reward}")

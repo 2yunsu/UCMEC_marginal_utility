@@ -494,4 +494,8 @@ def get_config():
         help="by default None. set the path to pretrained model.",
     )
 
+    # wandb 관련 인자들 추가
+    parser.add_argument("--use_wandb", action='store_true', default=False, help="use wandb")
+    parser.add_argument("--wandb_name", type=str, default="", help="wandb username")
+
     return parser

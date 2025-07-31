@@ -113,8 +113,15 @@ class EnvRunner(Runner):
             if episode % self.eval_interval == 0 and self.use_eval:
                 self.eval(total_num_steps)
 
-        file_name = 'reward.mat'
-        savemat(file_name, {'reward': reward_list})
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        file_name = f'reward_{self.algorithm_name}_{self.experiment_name}_{timestamp}.mat'
+
+        savemat(file_name, {
+            'reward': self.reward_list,
+            'algorithm': self.algorithm_name,
+            'experiment': self.experiment_name,
+            'scenario': self.all_args.scenario_name
+        })
 
     def warmup(self):
         # reset env

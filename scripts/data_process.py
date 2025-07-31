@@ -5,8 +5,8 @@ import hdf5storage
 
 # import data
 # data = hdf5storage.loadmat('./reward_data_20240324.mat')
-data = hdf5storage.loadmat('./reward_list.mat')
-reward_list = np.array(data['reward_list'])  # 将matlab数据赋值给python变量
+data = hdf5storage.loadmat('./reward.mat')
+reward_list = np.array(data['reward'])  # 将matlab数据赋值给python变量
 reward_list_processed = reward_list
 # data processing
 

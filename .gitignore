@@ -1,0 +1,8 @@
+# 학습 결과 디렉토리 제외
+/results
+results/
+
+# Wandb 로그 디렉토리 제외
+/scripts/wandb
+scripts/wandb/
+wandb/

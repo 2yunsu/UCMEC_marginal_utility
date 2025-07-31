@@ -8,6 +8,7 @@
 import gym
 from gym import spaces
 import numpy as np
+import os
 from envs.env_core import EnvCore
 from envs.MA_UCMEC_stat_coop import MA_UCMEC_stat_coop
 from envs.MA_UCMEC_stat_noncoop import MA_UCMEC_stat_noncoop
@@ -23,6 +24,7 @@ from envs.MA_CBO_dyna_noncoop import MA_CBO_dyna_noncoop
 from envs.MA_MPO_dyna_coop import MA_MPO_dyna_coop
 from envs.MA_MPO_dyna_noncoop import MA_MPO_dyna_noncoop
 
+from envs.MA_UCMEC_stat_ldmu import MA_UCMEC_stat_ldmu
 
 
 class DiscreteActionEnv(object):
@@ -30,9 +32,17 @@ class DiscreteActionEnv(object):
     对于离散动作环境的封装
     Wrapper for discrete action environment.
     """
+    _print_once = {}  # 클래스 변수로 한 번만 출력 관리
+    
+    def __init__(self, scenario_name=None):
+        # 시나리오 이름을 환경변수에서 가져오거나 파라미터로 받음
+        if scenario_name is None:
+            scenario_name = os.getenv('SCENARIO_NAME', 'MA_UCMEC_stat_noncoop')
+        
+        # 시나리오에 따라 다른 환경 로드
+        self.env = self._create_environment(scenario_name)
 
-    def __init__(self):
-        self.env = MA_UCMEC_stat_noncoop()
+        # self.env = MA_UCMEC_stat_noncoop() #yslee
         self.num_agent = self.env.agent_num
         self.signal_obs_dim = self.env.obs_dim
         self.signal_action_dim = self.env.action_dim
@@ -90,6 +100,43 @@ class DiscreteActionEnv(object):
             for _ in range(self.num_agent)
         ]
 
+    def _create_environment(self, scenario_name):
+        """시나리오 이름에 따라 해당 환경을 생성"""
+        env_mapping = {
+            # UCMEC 환경들
+            'MA_UCMEC_stat_coop': MA_UCMEC_stat_coop,
+            'MA_UCMEC_stat_noncoop': MA_UCMEC_stat_noncoop,
+            'MA_UCMEC_stat_ldmu': MA_UCMEC_stat_ldmu,
+            'MA_UCMEC_dyna_coop': MA_UCMEC_dyna_coop,
+            'MA_UCMEC_dyna_noncoop': MA_UCMEC_dyna_noncoop,
+            
+            # CBO 환경들
+            'MA_CBO_stat_coop': MA_CBO_stat_coop,
+            'MA_CBO_stat_noncoop': MA_CBO_stat_noncoop,
+            'MA_CBO_dyna_coop': MA_CBO_dyna_coop,
+            'MA_CBO_dyna_noncoop': MA_CBO_dyna_noncoop,
+            
+            # MPO 환경들
+            'MA_MPO_stat_coop': MA_MPO_stat_coop,
+            'MA_MPO_stat_noncoop': MA_MPO_stat_noncoop,
+            'MA_MPO_dyna_coop': MA_MPO_dyna_coop,
+            'MA_MPO_dyna_noncoop': MA_MPO_dyna_noncoop,
+        }
+        
+        # 한 번만 프린트
+        if scenario_name not in DiscreteActionEnv._print_once:
+            DiscreteActionEnv._print_once[scenario_name] = True
+            print(f"Loading environment: {scenario_name} (creating {os.getenv('N_ROLLOUT_THREADS', 'multiple')} parallel instances)")
+        
+        if scenario_name in env_mapping:
+            env_class = env_mapping[scenario_name]
+            return env_class(render=False)
+        else:
+            if f"warning_{scenario_name}" not in DiscreteActionEnv._print_once:
+                DiscreteActionEnv._print_once[f"warning_{scenario_name}"] = True
+                print(f"Warning: Unknown scenario '{scenario_name}', using default MA_UCMEC_stat_noncoop")
+            return MA_UCMEC_stat_noncoop(render=False)
+
     def step(self, actions):
         """
         输入actions维度假设：
@@ -109,13 +156,26 @@ class DiscreteActionEnv(object):
         return np.stack(obs)
 
     def close(self):
-        pass
+        if hasattr(self.env, 'close'):
+            self.env.close()
 
     def render(self, mode="rgb_array"):
-        pass
+        if hasattr(self.env, 'render'):
+            return self.env.render(mode)
 
     def seed(self, seed):
-        pass
+        if hasattr(self.env, 'seed'):
+            return self.env.seed(seed)
+        return [seed]
+
+    def get_env_info(self):
+        """환경 정보 반환"""
+        return {
+            'scenario_name': self.env.__class__.__name__,
+            'num_agents': self.num_agent,
+            'obs_dim': self.signal_obs_dim,
+            'action_dim': self.signal_action_dim,
+        }
 
 
 class MultiDiscrete:

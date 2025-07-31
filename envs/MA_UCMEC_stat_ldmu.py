@@ -10,8 +10,7 @@ import time
 import psutil
 import GPUtil
 
-
-class MA_UCMEC_stat_coop(object):
+class MA_UCMEC_stat_ldmu(object):
     def __init__(self, render: bool = False):
         # Initialization
         self.is_mobile = False
@@ -64,7 +63,7 @@ class MA_UCMEC_stat_coop(object):
         self.Task_size = np.random.uniform(50000, 100000, [1, self.M])  # task size in bit
         self.Task_density = np.random.uniform(500, 1000, [1, self.M])  # task density cpu cycles per bit
         # Task_max_delay = np.random.uniform(2, 5, [1, M])  # task max delay in second
-        self.cluster_size = 5  # AP cluster size
+        self.cluster_size = 1 # AP cluster size
 
         # edge server parameter
         self.C_edge = np.random.uniform(10e9, 20e9, [self.K, 1])  # computing resource of edge server in CPU
@@ -165,7 +164,7 @@ class MA_UCMEC_stat_coop(object):
         # parameter init
         self.n_agents = self.M_sim
         self.agent_num = self.n_agents
-        self.obs_dim = self.M_sim * 3  # set the observation dimension of agents
+        self.obs_dim = 3  # set the observation dimension of agents
         self.action_dim = 10
         self._render = render
         # action space: [omega_1,omega_2,...,omega_K,p]  K+1 continuous vector for each agent
@@ -178,9 +177,6 @@ class MA_UCMEC_stat_coop(object):
         # r in [0, 10e8]
         self.obs_low = np.array([0, 0, 0])
         self.obs_high = np.array([2, self.P_max, 0.2])
-        for i in range(self.M_sim - 1):
-            self.obs_low = np.append(self.obs_low, np.array([0, 0, 0]))
-            self.obs_high = np.append(self.obs_high, np.array([2, self.P_max, 0.2]))
         # self.observation_space = spaces.MultiDiscrete([500] * self.M_sim)
         # self.observation_space = spaces.Box(low=self.r_low, high=self.r_high, shape=(self.M_sim,), dtype=np.float32)
         self.observation_space = spaces.Tuple(tuple(
@@ -332,7 +328,6 @@ class MA_UCMEC_stat_coop(object):
         # 에피소드 시작 시간 초기화
         self.start_time = time.time()
         self.step_num = 0
-        
         sub_agent_obs = []
         for i in range(self.agent_num):
             sub_obs = np.random.uniform(low=self.obs_low, high=self.obs_high, size=(self.obs_dim,))
@@ -359,7 +354,8 @@ class MA_UCMEC_stat_coop(object):
             for i in range(self.M):
                 for j in range(self.N):
                     self.distance_matrix[i, j] = math.sqrt((self.locations_users[i, 0] - self.locations_aps[j, 0]) ** 2
-                                                           + (self.locations_users[i, 1] - self.locations_aps[j, 1]) ** 2)
+                                                           + (self.locations_users[i, 1] - self.locations_aps[
+                        j, 1]) ** 2)
             # distance
             for i in range(self.M):
                 for j in range(self.N):
@@ -394,7 +390,6 @@ class MA_UCMEC_stat_coop(object):
                 for j in range(self.N):
                     theta[i, j] = self.tau_p * self.P_max * (self.beta[i, j] ** 2) / (
                             self.tau_p * self.P_max * self.beta[i, j] + self.noise_access)
-
         # obtain and clip the action
         omega_current = np.zeros([self.M_sim])
         p_current = np.zeros([self.M_sim])
@@ -497,7 +492,6 @@ class MA_UCMEC_stat_coop(object):
         # print(actual_process_delay)
         # print(C.value)
         '''
-
         # CPU 사용량 계산
         cpu_usage = psutil.cpu_percent(interval=0.1)
         memory_usage = psutil.virtual_memory().percent
@@ -531,59 +525,17 @@ class MA_UCMEC_stat_coop(object):
 
         reward = np.zeros([self.M_sim, 1])
         for i in range(self.M_sim):
-            reward[i, 0] = -0.9 * np.sum(total_delay) / self.M_sim + 0.1 * (
-                    self.tau_c - np.sum(total_delay) / self.M_sim)
+            # reward[i, 0] = -0.9 * total_delay[i, 0] + 0.1 * (self.tau_c - total_delay[i, 0])
+            reward[i, 0] = -(np.exp(local_delay[i, 0]) + np.exp(front_delay[i, 0] + uplink_delay[i, 0] + actual_process_delay[i, 0]))
         # print("Average Total Delay (ms):", np.sum(total_delay) * 1000 / self.M_sim)
         # print("Average Uplink Rate (Mbps):", np.sum(uplink_rate_access) / (self.M_sim * 1e6))
-        sub_agent_obs = []
-        sub_agent_reward = []
-        sub_agent_done = []
-        sub_agent_info = []
-        observation = np.zeros([self.agent_num, self.obs_dim])
-        for i in range(self.agent_num):
-            if self.step_num != 1:
-                observation[i, 0] = self.omega_last[i]
-                observation[i, 1] = self.p_last[i]
-                observation[i, 2] = self.delay_last[i, 0]
-                for j in range(self.agent_num - 1):
-                    observation[i, (3 + j * 3):(3 + (j + 1) * 3)] = np.array(
-                        [self.omega_last[i], self.p_last[i], self.delay_last[i, 0]])
-            observation = np.array(observation)
-            sub_agent_obs.append(observation[i, :].flatten())
-            sub_agent_reward.append(reward[i])
-            sub_agent_done.append(done[i])
-            sub_agent_info.append({})
-        self.delay_last = total_delay
-        self.omega_last = omega_current
-        self.p_last = p_current
-
+        
+        # wandb 로깅
         if self.use_wandb:
             # 기본 메트릭
             avg_reward = np.mean(reward)
-            avg_total_delay = np.mean(total_delay) * 1000  # ms 단위 (지연시간)
-            avg_total_delay_sec = np.mean(total_delay)  # 초 단위 (지연시간)
-            avg_uplink_rate = np.sum(uplink_rate_access) / (self.M_sim * 1e6)  # Mbps (통신률)
-            
-            # 활성 사용자 수 계산
-            active_users = np.sum(omega_current != 0)
-            
-            # 처리량 계산 (Mbps와 bps 단위)
-            total_throughput_mbps = 0
-            total_throughput_bps = 0
-            uplink_throughput_mbps = np.sum(uplink_rate_access) / 1e6  # Mbps
-            uplink_throughput_bps = np.sum(uplink_rate_access)  # bps
-            fronthaul_throughput_mbps = 0
-            fronthaul_throughput_bps = 0
-            
-            for i in range(self.M_sim):
-                if omega_current[i] != 0:
-                    for j in range(self.N_sim):
-                        if self.cluster_matrix[i, j] == 1:
-                            fronthaul_throughput_mbps += front_rate_user[i, j] / 1e6  # Mbps
-                            fronthaul_throughput_bps += front_rate_user[i, j]  # bps
-            
-            total_throughput_mbps = uplink_throughput_mbps + fronthaul_throughput_mbps
-            total_throughput_bps = uplink_throughput_bps + fronthaul_throughput_bps
+            avg_total_delay = np.mean(total_delay) * 1000  # ms 단위
+            avg_uplink_rate = np.sum(uplink_rate_access) / (self.M_sim * 1e6)  # Mbps
             
             # CPU 계산량 관련 메트릭
             total_computing_load = 0
@@ -594,8 +546,7 @@ class MA_UCMEC_stat_coop(object):
                 for j in range(self.M_sim):
                     if omega_current[j] != 0 and int(omega_current[j] - 1) == i:
                         edge_load += task_mat[j, i]
-                if self.C_edge[i, 0] > 0:
-                    edge_utilization[i] = edge_load / self.C_edge[i, 0]
+                edge_utilization[i] = edge_load / self.C_edge[i, 0]
                 total_computing_load += edge_load
             
             # 로컬 처리 비율
@@ -613,7 +564,6 @@ class MA_UCMEC_stat_coop(object):
                 "delay/average_process_delay_ms": np.mean(actual_process_delay) * 1000,
                 "delay/average_front_delay_ms": np.mean(front_delay) * 1000,
                 "delay/delay_ratio": np.mean(local_delay) / (np.mean(front_delay) + np.mean(uplink_delay) + np.mean(actual_process_delay)),  # added
-
                 
                 # 통신 메트릭
                 "communication/average_uplink_rate_mbps": avg_uplink_rate,
@@ -653,7 +603,29 @@ class MA_UCMEC_stat_coop(object):
                     "episode/total_episode_time": episode_time,
                     "episode/average_step_time": episode_time / self.step_num,
                 })
-
+ 
+        sub_agent_obs = []
+        sub_agent_reward = []
+        sub_agent_done = []
+        sub_agent_info = []
+        observation = np.empty([self.obs_dim])
+        for i in range(self.agent_num):
+            if self.step_num == 1:
+                observation[0] = 0
+                observation[1] = 0
+                observation[2] = 0
+            else:
+                observation[0] = self.omega_last[i]
+                observation[1] = self.p_last[i]
+                observation[2] = self.delay_last[i, 0]
+            observation = np.array(observation)
+            sub_agent_obs.append(observation.flatten())
+            sub_agent_reward.append(reward[i])
+            sub_agent_done.append(done[i])
+            sub_agent_info.append({})
+        self.delay_last = total_delay
+        self.omega_last = omega_current
+        self.p_last = p_current
         return [sub_agent_obs, sub_agent_reward, sub_agent_done, sub_agent_info]
 
 

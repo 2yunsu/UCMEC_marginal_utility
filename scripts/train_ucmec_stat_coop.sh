@@ -5,7 +5,7 @@ num_landmarks=3  # UCMEC 환경에서는 불필요하지만 유지
 num_agents=10  # UCMEC 환경의 M_sim 값과 맞춰야 함
 algo="rmappo"
 exp="ucmec_stat_coop"  # 실험명 변경
-seed_max=1
+seed_max=10
 
 echo "env is ${env}, scenario is ${scenario}, algo is ${algo}, exp is ${exp}, max seed is ${seed_max}"
 for seed in `seq ${seed_max}`;
@@ -33,5 +33,6 @@ do
     --use_wandb \
     --wandb_name "2yunsu" \
     --user_name "2yunsu" \
+    --use_naive_recurrent_policy \
 
 done

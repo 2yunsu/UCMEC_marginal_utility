@@ -190,7 +190,7 @@ def main(args):
 
     # env init
     envs = make_train_env(all_args)
-    eval_envs = make_eval_env(all_args) if all_args.use_eval else None
+    eval_envs = make_eval_env(all_args) if all_args.use_eval else None ###약간 똑같은 환경 돌리는 게 아닌가 의심됨.
     num_agents = all_args.num_agents
 
     config = {

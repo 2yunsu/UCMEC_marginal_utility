@@ -11,7 +11,7 @@ import psutil
 import GPUtil
 
 class MA_UCMEC_stat_ldmu(object):
-    def __init__(self, render: bool = False):
+    def __init__(self, args=None, render: bool = False):
         # Initialization
         self.is_mobile = False
         gym.logger.set_level(40)
@@ -39,8 +39,18 @@ class MA_UCMEC_stat_ldmu(object):
         # self.locations_cpu[3, 0] = 600
         # self.locations_cpu[3, 1] = 600
 
-        # wandb 초기화 (train.py에서 이미 초기화되었다면 생략 가능)
-        self.use_wandb = True
+        # wandb 설정 - args에서 use_wandb 확인
+        if args is not None and hasattr(args, 'use_wandb'):
+            self.use_wandb = args.use_wandb
+        else:
+            self.use_wandb = False  # 기본값은 False
+
+        # 전력 페널티 함수 설정
+        if args is not None and hasattr(args, 'power_penalty_func'):
+            self.power_penalty_func = args.power_penalty_func
+        else:
+            self.power_penalty_func = "0"  # 기본값: 페널티 없음
+
         self.start_time = time.time()
 
         # calculate distance between APs and users MxN matrix
@@ -526,7 +536,8 @@ class MA_UCMEC_stat_ldmu(object):
         reward = np.zeros([self.M_sim, 1])
         for i in range(self.M_sim):
             # reward[i, 0] = -0.9 * total_delay[i, 0] + 0.1 * (self.tau_c - total_delay[i, 0])
-            reward[i, 0] = -(np.exp(local_delay[i, 0]) + np.exp(front_delay[i, 0] + uplink_delay[i, 0] + actual_process_delay[i, 0]))
+            # reward[i, 0] = -(np.exp(local_delay[i, 0]) + np.exp(front_delay[i, 0] + uplink_delay[i, 0] + actual_process_delay[i, 0]))
+            reward[i, 0] = -0.9 * total_delay[i, 0] + 0.1 * (self.tau_c - total_delay[i, 0]) - ((np.exp(self.p_last[i])-1)/100)
         # print("Average Total Delay (ms):", np.sum(total_delay) * 1000 / self.M_sim)
         # print("Average Uplink Rate (Mbps):", np.sum(uplink_rate_access) / (self.M_sim * 1e6))
         

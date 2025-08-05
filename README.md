@@ -41,4 +41,12 @@ bash train_ucmec_stat_nocoop.sh
 train_ucmec_stat_ldmu.sh
 ```
 
+If you want to change the marginal rate, you should to fix it in "./envs/MA_UCMEC_stat_ldmu.py"
 
+```
+        reward = np.zeros([self.M_sim, 1])
+        for i in range(self.M_sim):
+            reward[i, 0] = -0.9 * total_delay[i, 0] + 0.1 * (self.tau_c - total_delay[i, 0]) - ((np.exp(self.p_last[i])-1)/50)
+```
+
+The `((np.exp(self.p_last[i])-1)/50)` is penalty term, then you can change 50 to 100 or 10 to control the scale.

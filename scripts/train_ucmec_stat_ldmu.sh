@@ -5,10 +5,10 @@ num_landmarks=3  # UCMEC 환경에서는 불필요하지만 유지
 num_agents=10  # UCMEC 환경의 M_sim 값과 맞춰야 함
 algo="rmappo"
 exp="ucmec_stat_ldmu"  # 실험명 변경
-seed_max=2
+seed_max=3
 
 # 전력 페널티 함수 설정
-power_penalty="((np.exp(self.p_last[i])-1)/100)"
+power_penalty="((np.exp(self.p_last[i])-1)/50)"
 
 echo "env is ${env}, scenario is ${scenario}, algo is ${algo}, exp is ${exp}, max seed is ${seed_max}"
 echo "power penalty function: ${power_penalty}"
